@@ -1,4 +1,5 @@
 from random import shuffle, randint
+from os import system
 
 
 class Card(object):
@@ -9,23 +10,20 @@ class Card(object):
         self.rank = rank
 
     def __str__(self):
-        return '{0}-{1}'.format(self.symbol, self.rank)
+        return '{0} - {1}'.format(self.symbol, self.rank)
 
 
 class Player(object):
     """ Class for blackjack player. """
 
-    dealer = False
-    # placed_bet = 0
-    # points = 0
-
-    def __init__(self, name, bankroll=0):
+    def __init__(self, name, bankroll=0, dealer=False):
         self.name = name
         self.bankroll = bankroll
+        self.dealer = dealer
         self.placed_bet = 0
         self.points = 0
-        # (problem) if this has been assigned as the Class Object Attribute, the method of append to the list
-        # will affect all instances, causing all players have the same hand.
+        # if a list has been declared as the Class Object Attribute, any changes to the list
+        # will affect all instances, causing all players having the same hand.
         self.hand = list()
 
     def deposit(self, amount):
@@ -38,6 +36,25 @@ class Player(object):
         self.hand.append(
             {'card': card,
              'folding': folding})
+
+    def lose(self):
+        print('{0} loses!'.format(self.name))
+        self.placed_bet = 0
+
+    def win(self, natural):
+        if natural:
+            print('{0} wins with blackjack! Pays 3 to 2'.format(self.name))
+            self.bankroll += 2.5 * self.placed_bet
+            self.placed_bet = 0
+        else:
+            print('{0} wins! '.format(self.name))
+            self.bankroll += 2 * self.placed_bet
+            self.placed_bet = 0
+
+    def push(self):
+        print('{0} Push! '.format(self.name))
+        self.bankroll += self.placed_bet
+        self.placed_bet = 0
 
 
 def build_deck():
@@ -53,9 +70,9 @@ def build_deck():
             for r in ranks:
                 deck.append(Card(s, r))
 
-    plastic_card = " "
+    # plastic_card = " "
     shuffle(deck)
-    deck.insert(-randint(60, 75), plastic_card)  # minus to count from the last card
+    # deck.insert(-randint(60, 75), plastic_card)  # minus to count from the last card
 
     return deck
 
@@ -63,8 +80,7 @@ def build_deck():
 def player_sign_up():
     """ Create a dealer and other players with names and initial bankrolls. """
 
-    dealer = Player('dealer')
-    dealer.dealer = True
+    dealer = Player('dealer', dealer=True)
 
     while True:
         try:
@@ -74,7 +90,7 @@ def player_sign_up():
             print('Please input an integer! ')
             continue
         else:
-            print('Welcome! We have {0} player(s) joined the blackjack, and each has {1} dollars. '.format(n, m))
+            print('Welcome! We have {0} player(s) joined the blackjack, and each has {1} dollars'.format(n, m))
             break
 
     p = list()
@@ -87,7 +103,7 @@ def player_sign_up():
     return p
 
 
-def place_bet(players):
+def place_bet(players, min_bet=2, max_bet=500):
     """ Ask all players to place a bet in front of him in the designated area, limits are from $2 to $500 """
 
     for p in players:
@@ -99,8 +115,10 @@ def place_bet(players):
                 continue
             else:
                 if b > p.bankroll:
-                    print('Your bankroll is too small to cover this bet. ')
+                    print('Your bankroll is too small to cover this bet ')
                     continue
+                elif b < min_bet or b > max_bet:
+                    print('Wager is ranged from ${0} to ${1} '.format(min_bet, max_bet))
                 else:
                     p.withdraw(b)
                     p.placed_bet = b
@@ -112,10 +130,13 @@ def deal_cards(players, shoe):
     """ Gives one card face up to each player, and then one card to the dealer.
         Next, gives another card face up to each player, but one face down to the dealer """
 
-    players.append(players.pop(0))  # move the dealer to the last
-    deal_order = players
+    print('Dealing cards to each member ...')
+    deal_order = list()
+    for i in players:
+        deal_order.append(i)
 
-    print('Dealing cards ...')
+    deal_order.append(deal_order.pop(0))  # move the dealer to the last
+
     for r in range(2):
         for p in deal_order:
             if r == 1 and p.dealer:  # the second card of the dealer should be folded. (default unfolded.)
@@ -127,103 +148,214 @@ def deal_cards(players, shoe):
 def print_table(players):
     """ Print the current status (cards and points of each player and the dealer) on the table. """
 
+    system('clear')
     for p in players:
-        print('*-*-*-*-*-*-*-*-*-*')
 
+        p.points = 0
         if not p.dealer:
-            print("{0} wagered ${1} on ".format(p.name, p.placed_bet))
+            print("{0} | Bankroll Remains ${1} | Wager ${2} ".format(p.name, p.bankroll, p.placed_bet))
             ranks = list()
             for card in p.hand:
                 print(card['card'])
                 ranks.append(card['card'].rank)
+
             p.points += count_points(ranks)
+            # special treatment for rank A (for player)
+            if 'A' in ranks:
+                for i in range(len(ranks)):
+                    if ranks[i] == 'A' and p.points + 10 < 22:
+                        p.points += 10
+            # checks for bust
+            if p.points > 21:
+                p.points = 'bust'
+
             print('\nTotal: {0}'.format(p.points))
         else:
-            print('Dealer')
+            print('Banker')
             ranks = list()
             for card in p.hand:
                 if card['folding']:
-                    print('Card - face down')
+                    print('hole card (face down)')
                 else:
                     print(card['card'])
                     ranks.append(card['card'].rank)
+
             p.points += count_points(ranks)
+            # special treatment for rank A (for dealer)
+            if 'A' in ranks:
+                for i in range(len(ranks)):
+                    if ranks[i] == 'A' and p.points + 10 < 22:
+                        p.points += 10
+            # checks for bust
+            if p.points > 21:
+                p.points = 'bust'
+
             print('\nTotal: {0}'.format(p.points))
+
+        print('*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
 
 
 def count_points(ranks):
+    """ Input a list of ranks to get the total points of hand """
 
     points = 0
     for rank in ranks:
         if rank not in ['A', 'J', 'Q', 'K']:
             points += int(rank)
-        elif rank in ['J', 'Q', 'K']:
-            points += 10
+        elif rank in ['A']:
+            points += 1
         else:
-            points += 11
+            points += 10
 
     return points
+
+
+def dealer_natural(players):
+    """ Check if the dealer gets the natural (reach 21 without hitting) """
+
+    for p in players:
+        if p.dealer and p.points >= 10:
+            print('Dealer checks for blackjack ...')
+            ranks = list()
+            for card in p.hand:
+                ranks.append(card['card'].rank)
+            if count_points(ranks) == 21:
+                print('Dealer has blackjack! ')
+                for card in p.hand:
+                    card['folding'] = False
+                return True
+            else:
+                print('Dealer does not have blackjack')
+                return False
+
+
+def player_natural(p):
+    """ Check if any of the players gets the natural (reach 21 without hitting) """
+
+    if not p.dealer and p.points == 21:
+        print('{0} has blackjack! '.format(p.name))
+        return True
+    elif not p.dealer and p.points < 21:
+        return False
+
+
+def player_options(p, shoe):
+
+    while True:
+        ans = input('{0}, do you wanna (a) hit or (b) stand? '.format(p.name)).lower()
+        if ans not in ['a', 'b']:
+            print('Please input letter "a" or "b"')
+            continue
+        else:
+            if ans == 'a':
+                return p.deal(shoe.pop(0))
+            elif ans == 'b':
+                return 'stand'
+
+
+def dealer_play(players, shoe):
+
+    for p in players:
+        if p.dealer:
+            ranks = list()
+            for card in p.hand:
+                card['folding'] = False
+                ranks.append(card['card'].rank)
+            # dealer must hit if total if less than 17, otherwise, stand
+            if count_points(ranks) < 17:
+                return p.deal(shoe.pop(0))
+            else:
+                return 'stand'
+
+
+def status_reset(players):
+
+    for p in players:
+        p.placed_bet = 0
+        p.hand = list()
+        p.points = 0
 
 
 if __name__ == '__main__':
 
     all_players = player_sign_up()
-    shoe_box = build_deck()
-    place_bet(all_players)
-    # Each player is dealt two cards face up, then dealer receives one upcard and one hole card.
-    deal_cards(all_players, shoe_box)
-    print_table(all_players)
-    # If the dealer has an ace showing, the insurance bet is offered to each player in turn.
 
-    # If early surrander is allowed, each player has the option to surrender, taking back half his bet 
-    # and forfeiting the rest.
+    game_on = 'y'
+    while game_on == 'y':
 
-    # If dealer has an ace, 10, or face card, the dealer checks for blackjack. If the dealer has blackjack, 
-    # any insurance bets are paid, and all other bets are settled. If the dealer does not have blackjack,
-    # any insuraces bets are collected, player who have blackjack are paid 3:2 and the game continues.
+        shoe_box = build_deck()
+        place_bet(all_players)
+        # Each player is dealt two cards face up, then dealer receives one up card and one hole card.
+        deal_cards(all_players, shoe_box)
+        print_table(all_players)
+        # If the dealer has an ace showing, the insurance bet is offered to each player in turn.
 
-    # Each player whose bet has not yet been settled gets their turn.
-    # 1) if late surrender is allowed, they may surrender at any point provided they are not bust.
-    # 2) if they have two equal cards, they may split if allowed.
-    # 3) if they do not split, they may double down if allowed.
-    # 4) if they do not double down, they may hit as many times as they wish until they bust (go over 21)
-    #    or stand.
+        # (working on it ...)
 
-    # If there are any players whose bet is not yet settled, the dealer's hole card is shown, the dealer hits 
-    # or stands as prescribed by the rules, and all remaining bets are collected or paid.
+        # If early surrender is allowed, each player has the option to surrender, taking back half his bet
+        # and forfeiting the rest.
 
+        # (working on it ...)
 
-    # Insurance
-    # When the dealer's face-up card is an ace, each player gets the chance to bet on whether the dealer has
-    # a blackjack or not. This is done before any other player actions.
-    # The insurance wager equals your original bet and is used to cancel out the likely loss of this bet.
-    # A winning insurance bet will be paid at odds of 2:1, and since you lose your original bet, you'll break
-    # even on the hand. Strategy guides tend to advice against taking insurance.
+        # If dealer has an ace, 10, or face card, the dealer checks for blackjack. If the dealer has blackjack,
+        # any insurance bets are paid, and all other bets are settled. If the dealer does not have blackjack,
+        # any insurance bets are collected, player who have blackjack are paid 3:2 and the game continues.
+        if dealer_natural(all_players):
+            for player in all_players:
+                if player_natural(player):
+                    player.push()
+                    player.points = 'push'
+                    print_table(all_players)
+                else:
+                    player.lose()
+                    print_table(all_players)
+        else:
+            for player in all_players:
+                if not player.dealer:
+                    if player_natural(player):
+                        player.win(natural=True)
+                        print_table(all_players)
+                    else:
+                        while True:
+                            if player_options(player, shoe_box) == 'stand':
+                                break
+                            else:  # hit
+                                print_table(all_players)  # print_table checks for bust
+                                if player.points == 'bust':
+                                    player.lose()
+                                    break
+                                else:
+                                    continue
+            while True:
+                if dealer_play(all_players, shoe_box) == 'stand':
+                    break
+                else:  # hit
+                    print_table(all_players)
+                    for player in all_players:
+                        if player.dealer and player.points == 'bust':
+                            for rest in all_players:
+                                if rest.points != 'bust':
+                                    rest.win(natural=False)
+                            break
+                        else:
+                            continue
 
-    # Surrender
-    # If you have a bad hand compared to the dealer's hand (judging from what you can see of it), you can give
-    # up the hand and reclaim half of your bet. The casino keeps the other half uncontested. You need a really
-    # bad hand match-up for a surrender to be profitable, such as 16 vs the dealer showing a 10.
+            for player in all_players:
+                if player.dealer and player.points != 'bust':
+                    print_table(all_players)
+                    for other in all_players:
+                        if not other.dealer and other.points != 'bust':
+                            if player.points > other.points:
+                                other.lose()
+                            elif player.points == other.points:
+                                other.push()
+                            else:
+                                other.win(natural=False)
 
-    # Splitting
-    # When you get two starting cards of the same face value, you have the option to split the cards in two.
-    # You place another bet of the same size as the original bet and play on with two hands. (Note that it is
-    # legel to split 10-point cards even if they do not form a pair - for example you could split a jack and a
-    # queen.)
-    # When you've decided to split a hand, the dealer immediately deals a second card to each hand. Now, if you
-    # are dealt yet another pair, some casino allow you to split the hand again, while others don't.
-    # When you're done splitting, each of your hands will be treated separately, meaning that you will take cards
-    # to your first hand until you stand or bust, and then carry on with the next hand.
-    # If you split aces, you are dealt a second card to each hand as usual, but you are not allowed to take any 
-    # further cards (unless you are dealt another ace and split again). All hands resulting from splitting aces
-    # remain as two-card hands.
-    # If the second card dealt to a split ace is a 10-point card. You do not receive the blackjack bonus for this
-    # hand. It does however win against an ordinary 21 made of more than two cards. If the dealer also has a 
-    # blackjack, the result for this hand is a push as usual. In many places the same rule (no blackjack bonus)
-    # is played if an ace is dealt as the second card to a 10-point card after splitting.
-
-    # Doubling down
-    # If you're fairly sure that your hand will beat the dealer's, you can double your original bet. You're 
-    # sometimes allowed to double down for any amount up to the original bet amount. In most casinos you may
-    # double down on any hand, but some casinos require an opening hand worth 9, 10, or 11.
-    # When you've chosen to double down, you'll only get one more card from the dealer.
+        while True:
+            game_on = input('Continue to play? (y/n) ').lower()
+            if game_on not in ['y', 'n']:
+                continue
+            else:
+                status_reset(all_players)
+                break
